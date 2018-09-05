@@ -1,0 +1,52 @@
+#!/usr/bin/python3
+
+import argparse
+import os
+from datetime import datetime
+
+from PIL import Image
+
+
+class TimeStamps:
+    def __init__(self, base_path):
+        self.base_path = base_path
+        self.unknown_extensions = set()
+        self.images_with_wrong_date = list()
+        self.images_with_unreadable_date = list()
+
+    def _get_image_year_from_path(self, path):
+        test = os.path.split(os.path.dirname(path))[-1]
+        if test.isdigit():
+            return int(test)
+
+    def _is_supported_extension(self, file_extension):
+        is_supported = file_extension.lower() in ['.jpg', '.jpeg']
+        if not is_supported:
+            self.unknown_extensions.add(file_extension)
+        return is_supported
+
+    def _verify_date(self, file_full_name, image_year):
+        if self._is_supported_extension(os.path.splitext(file_full_name)[1]):
+            try:
+                picture_date_string = Image.open(file_full_name)._getexif()[36867]  # 2008:01:06 22:06:17
+                picture_date = datetime.strptime(picture_date_string, '%Y:%m:%d %H:%M:%S')
+                if picture_date.year != image_year:
+                    self.images_with_wrong_date.append(file_full_name)
+            except Exception as e:
+                self.images_with_unreadable_date.append({'file': file_full_name, 'exception': e})
+
+    def list(self):
+        for path, subdirs, files in os.walk(self.base_path):
+            image_year_from_path = self._get_image_year_from_path(path)
+            for file_name in files:
+                self._verify_date(os.path.join(path, file_name), image_year_from_path)
+
+        print('Wrong dates: {}\n'.format(self.images_with_wrong_date))
+        print('Unreadable dates: {}\n'.format(self.images_with_unreadable_date))
+        print('Unknown extensions: {}\n'.format(self.unknown_extensions))
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument("path", help='Base path to search for images')
+    TimeStamps(parser.parse_args().path).list()
